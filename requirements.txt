@@ -3,3 +3,6 @@ requests
 lxml
 beautifulsoup4
 playwright
+aiogram
+python-dotenv
+PyYAML
