@@ -85,10 +85,9 @@ python main.py
 pyinstaller --noconsole --onefile --name Dolgi --collect-all customtkinter --collect-all playwright main.py
 ```
 
-Результат — `dist\Dolgi.exe`. Рядом с ним должны лежать:
+**Пользователю exe ничего устанавливать не нужно**: при первом запуске программа сама скачает браузер Chromium (один раз, ~250 МБ, путь видно в журнале). Логин и пароль достаточно вписать в окне программы — они сохранятся в `.env` рядом с exe.
 
-* `.env` — скопируйте его в папку `dist\`;
-* браузеры Playwright в `%LOCALAPPDATA%\ms-playwright` — ставятся один раз командой `pip install playwright && playwright install chromium` (используются и exe, и исходной версией).
+Команда для самостоятельной сборки — выше; браузеры Playwright для неё ставятся один раз: `pip install playwright && playwright install chromium`.
 
 ---
 

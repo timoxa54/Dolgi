@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Callable, Optional
 
+import playwright
 from playwright.sync_api import Page, sync_playwright
 
 from . import config, storage
@@ -21,26 +23,96 @@ LogCallback = Callable[[str], None]
 ProgressCallback = Callable[[Optional[float]], None]
 
 
+def _browsers_dir() -> Path:
+    """Стандартное хранилище браузеров Playwright."""
+    env = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+
+    if env and env != "0":
+        return Path(env)
+
+    local_app_data = os.getenv("LOCALAPPDATA")
+
+    if local_app_data:
+        return Path(local_app_data) / "ms-playwright"
+
+    return Path.home() / "AppData" / "Local" / "ms-playwright"
+
+
 def _ensure_browsers_path() -> None:
     """Направляет playwright в стандартное хранилище браузеров.
 
     В собранном exe playwright выставляет PLAYWRIGHT_BROWSERS_PATH=0
     и ищет браузеры во временной папке распаковки, где их нет.
-    Указываем стандартный путь заранее (оттуда их ставит
-    `playwright install chromium`) — тогда переопределения не будет.
+    Задаём стандартный путь заранее — тогда переопределения не будет.
     """
-    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+    env = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+
+    if env and env != "0":
         return
 
-    local_app_data = os.getenv("LOCALAPPDATA")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(_browsers_dir())
 
-    if not local_app_data:
-        return
 
-    browsers_path = Path(local_app_data) / "ms-playwright"
+def _browsers_ready() -> bool:
+    """Установлены ли браузеры Chromium (обычный и headless-shell)."""
+    browsers = _browsers_dir()
 
-    if browsers_path.exists():
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
+    if not browsers.exists():
+        return False
+
+    has_chromium = any(browsers.glob("chromium-*/**/chrome.exe"))
+    has_headless = any(
+        browsers.glob("chromium_headless_shell-*/**/chrome-headless-shell.exe")
+    )
+
+    return has_chromium and has_headless
+
+
+def _install_browsers(on_log: Optional[LogCallback] = None) -> None:
+    """Скачивает Chromium через драйвер Playwright (один раз).
+
+    Драйвер уже упакован в приложение, поэтому пользователю
+    не нужен ни Python, ни установка чего-либо вручную.
+    Вывод скачивания пишется в журнал.
+    """
+    driver_dir = Path(playwright.__file__).parent / "driver"
+    node = driver_dir / ("node.exe" if os.name == "nt" else "node")
+    cli = driver_dir / "package" / "cli.js"
+
+    if not node.exists() or not cli.exists():
+        raise RuntimeError(
+            "Драйвер Playwright не найден — не могу скачать браузер."
+        )
+
+    env = os.environ.copy()
+    env["PLAYWRIGHT_BROWSERS_PATH"] = str(_browsers_dir())
+
+    process = subprocess.Popen(
+        [str(node), str(cli), "install", "chromium"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+
+    for line in process.stdout:  # type: ignore[union-attr]
+        line = line.strip()
+
+        if line:
+            _log(on_log, f"  {line}")
+
+    process.wait()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"Не удалось скачать браузер Chromium (код {process.returncode}). "
+            "Проверь интернет и попробуй ещё раз."
+        )
+
+    if not _browsers_ready():
+        raise RuntimeError("Браузер скачался, но не найден на диске.")
 
 
 def _log(on_log: Optional[LogCallback], message: str) -> None:
@@ -163,13 +235,25 @@ def fetch_zachetka_html(page: Page, on_log: Optional[LogCallback] = None) -> str
     return html
 
 
+def _ensure_browsers_installed(on_log: Optional[LogCallback] = None) -> None:
+    """Проверяет браузер и при необходимости один раз его скачивает."""
+    _ensure_browsers_path()
+
+    if _browsers_ready():
+        return
+
+    _log(on_log, "Браузер Chromium не найден. Один раз скачиваю (~250 МБ)...")
+    _install_browsers(on_log)
+    _log(on_log, "Браузер Chromium готов.")
+
+
 def fetch_debts(
     headless: bool = True,
     on_log: Optional[LogCallback] = None,
 ) -> tuple[ZachetkaInfo, list[Debt]]:
     """Авторизуется, загружает зачётную книжку и разбирает долги."""
     config.load_env()
-    _ensure_browsers_path()
+    _ensure_browsers_installed(on_log)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=headless)
@@ -587,7 +671,7 @@ def fetch_schedules(
 ) -> dict[str, ScheduleEntry]:
     """Собирает расписания преподавателей и (опционально) своей группы."""
     config.load_env()
-    _ensure_browsers_path()
+    _ensure_browsers_installed(on_log)
 
     schedule: dict[str, ScheduleEntry] = {}
 
