@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import Page, sync_playwright
@@ -17,6 +19,28 @@ from .parsing import parse_schedule_html, parse_zachetka_html
 
 LogCallback = Callable[[str], None]
 ProgressCallback = Callable[[Optional[float]], None]
+
+
+def _ensure_browsers_path() -> None:
+    """Направляет playwright в стандартное хранилище браузеров.
+
+    В собранном exe playwright выставляет PLAYWRIGHT_BROWSERS_PATH=0
+    и ищет браузеры во временной папке распаковки, где их нет.
+    Указываем стандартный путь заранее (оттуда их ставит
+    `playwright install chromium`) — тогда переопределения не будет.
+    """
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return
+
+    local_app_data = os.getenv("LOCALAPPDATA")
+
+    if not local_app_data:
+        return
+
+    browsers_path = Path(local_app_data) / "ms-playwright"
+
+    if browsers_path.exists():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
 
 
 def _log(on_log: Optional[LogCallback], message: str) -> None:
@@ -145,6 +169,7 @@ def fetch_debts(
 ) -> tuple[ZachetkaInfo, list[Debt]]:
     """Авторизуется, загружает зачётную книжку и разбирает долги."""
     config.load_env()
+    _ensure_browsers_path()
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=headless)
@@ -562,6 +587,7 @@ def fetch_schedules(
 ) -> dict[str, ScheduleEntry]:
     """Собирает расписания преподавателей и (опционально) своей группы."""
     config.load_env()
+    _ensure_browsers_path()
 
     schedule: dict[str, ScheduleEntry] = {}
 

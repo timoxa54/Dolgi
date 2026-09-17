@@ -77,6 +77,21 @@ TELEGRAM_ADMIN_ID=...    # зарезервировано на будущее, �
 python main.py
 ```
 
+## Собранный exe
+
+Готовый `Dolgi.exe` собирается командой:
+
+```powershell
+pyinstaller --noconsole --onefile --name Dolgi --collect-all customtkinter --collect-all playwright main.py
+```
+
+Результат — `dist\Dolgi.exe`. Рядом с ним должны лежать:
+
+* `.env` — скопируйте его в папку `dist\`;
+* браузеры Playwright в `%LOCALAPPDATA%\ms-playwright` — ставятся один раз командой `pip install playwright && playwright install chromium` (используются и exe, и исходной версией).
+
+---
+
 1. Проверь логин/пароль (сохраняются в `.env` по кнопке).
 2. **Загрузить долги** — войти на сайт, забрать зачётку, показать карточки.
 3. **Загрузить расписания** — собрать расписания преподавателей из долгов и своей группы.
