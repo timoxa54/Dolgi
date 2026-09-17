@@ -31,6 +31,47 @@ GRADE_CHOICES = [value if value else "— оценка —" for value in GRADE_O
 DEBT_TYPE_TO_KEY = {value: key for key, _label, value in DEBT_TYPE_FILTERS}
 
 
+def bind_text_shortcuts(widget) -> None:
+    """Включает Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A в любой раскладке.
+
+    tkinter привязывает горячие клавиши к символу текущей раскладки:
+    в русской раскладке Ctrl+V даёт «м», и стандартная вставка
+    не срабатывает. Поэтому ловим клавиши по keycode,
+    который не зависит от раскладки.
+    """
+
+    def on_key(event):
+        if not event.state & 0x0004:  # Control
+            return None
+
+        keycode = event.keycode
+
+        if keycode == 86:  # V — вставить
+            event.widget.event_generate("<<Paste>>")
+        elif keycode == 67:  # C — копировать
+            event.widget.event_generate("<<Copy>>")
+        elif keycode == 88:  # X — вырезать
+            event.widget.event_generate("<<Cut>>")
+        elif keycode == 65:  # A — выделить всё
+            if hasattr(event.widget, "tag_add"):
+                event.widget.tag_add("sel", "1.0", "end")
+            elif hasattr(event.widget, "select_range"):
+                event.widget.select_range(0, "end")
+                event.widget.icursor("end")
+        else:
+            return None
+
+        return "break"
+
+    widget.bind("<KeyPress>", on_key)
+
+
+def set_entry_value(entry, value: str) -> None:
+    """Записывает значение в поле, не убивая подсказку для пустых значений."""
+    if value:
+        entry.insert(0, value)
+
+
 class DebtCard(ctk.CTkFrame):
     """Карточка долга: предмет, преподаватель, оценка, флаг учёта."""
 
@@ -52,9 +93,10 @@ class DebtCard(ctk.CTkFrame):
 
         self.subject_entry = ctk.CTkEntry(top, placeholder_text="Предмет")
         self.subject_entry.grid(row=0, column=0, sticky="ew")
-        self.subject_entry.insert(0, debt.subject)
+        set_entry_value(self.subject_entry, debt.subject)
         self.subject_entry.bind("<FocusOut>", self._on_subject_changed)
         self.subject_entry.bind("<Return>", self._on_subject_changed)
+        bind_text_shortcuts(self.subject_entry)
 
         delete_button = ctk.CTkButton(
             top,
@@ -76,9 +118,10 @@ class DebtCard(ctk.CTkFrame):
 
         self.teacher_entry = ctk.CTkEntry(middle, placeholder_text="Преподаватель")
         self.teacher_entry.grid(row=0, column=0, sticky="ew")
-        self.teacher_entry.insert(0, debt.teacher)
+        set_entry_value(self.teacher_entry, debt.teacher)
         self.teacher_entry.bind("<FocusOut>", self._on_teacher_changed)
         self.teacher_entry.bind("<Return>", self._on_teacher_changed)
+        bind_text_shortcuts(self.teacher_entry)
 
         self.grade_menu = ctk.CTkOptionMenu(
             middle,
@@ -219,18 +262,21 @@ class DolgiApp(ctk.CTk):
 
         self.login_entry = ctk.CTkEntry(auth, placeholder_text="Логин")
         self.login_entry.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
-        self.login_entry.insert(0, login)
+        set_entry_value(self.login_entry, login)
+        bind_text_shortcuts(self.login_entry)
 
         self.password_entry = ctk.CTkEntry(auth, placeholder_text="Пароль", show="•")
         self.password_entry.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
-        self.password_entry.insert(0, password)
+        set_entry_value(self.password_entry, password)
+        bind_text_shortcuts(self.password_entry)
 
         self.group_entry = ctk.CTkEntry(
             auth,
             placeholder_text="Твоя группа (например, ПИНФ_ПИЦЭ-31-24)",
         )
         self.group_entry.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
-        self.group_entry.insert(0, self.settings.get("group", ""))
+        set_entry_value(self.group_entry, self.settings.get("group", ""))
+        bind_text_shortcuts(self.group_entry)
 
         self.show_browser_switch = ctk.CTkSwitch(auth, text="показывать браузер")
         self.show_browser_switch.grid(row=3, column=0, sticky="w", padx=10, pady=(0, 8))
@@ -359,6 +405,7 @@ class DolgiApp(ctk.CTk):
         )
         self.log_text.grid(row=0, column=0, sticky="nsew")
         self.log_text.configure(state="disabled")
+        bind_text_shortcuts(self.log_text)
 
     # ------------------------------------------------------------------
     # Локальные данные
